@@ -10,7 +10,9 @@ class ServerWorker:
 	PAUSE = 'PAUSE'
 	TEARDOWN = 'TEARDOWN'
 	STARTAGAIN = 'STARTAGAIN'
-
+	SPEEDUP = 'SPEEDUP'
+	SLOWDOWN = 'SLOWDOWN'
+	
 	INIT = 0
 	READY = 1
 	PLAYING = 2
@@ -20,6 +22,8 @@ class ServerWorker:
 	FILE_NOT_FOUND_404 = 1
 	CON_ERR_500 = 2
 	
+	SPEED = 0.05
+
 	clientInfo = {}
 	
 	def __init__(self, clientInfo):
@@ -101,6 +105,7 @@ class ServerWorker:
 		# Process TEARDOWN request
 		elif requestType == self.TEARDOWN:
 			print("processing TEARDOWN\n")
+			self.SPEED = 0.05
 
 			try: # if the rtp socket has been setup
 				self.clientInfo['event'].set()
@@ -117,9 +122,9 @@ class ServerWorker:
 			self.clientInfo['videoStream'] = VideoStream(filename)
 			
 			print("processing STARTAGAIN\n")
-			# Create a new socket for RTP/UDP
-
+			
 			self.clientInfo['event'].set()
+			# Create a new socket for RTP/UDP
 			self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 			self.state = self.PLAYING
 			self.replyRtsp(self.OK_200, seq[1])
@@ -129,12 +134,45 @@ class ServerWorker:
 			self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
 			self.clientInfo['worker'].start()
 		
+		# Process SPEEDUP request
+		elif requestType == self.SPEEDUP:
+			self.SPEED = self.SPEED*0.5
+			
+			print("processing SPEEDUP\n")
+			
+			self.clientInfo['event'].set()
+			# Create a new socket for RTP/UDP
+			self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			self.state = self.PLAYING
+			self.replyRtsp(self.OK_200, seq[1])
+			
+			# Create a new thread and start sending RTP packets
+			self.clientInfo['event'] = threading.Event()
+			self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
+			self.clientInfo['worker'].start()
+
+		# Process SLOWDOWN request
+		elif requestType == self.SLOWDOWN:
+			self.SPEED = self.SPEED*2
+			
+			print("processing SLOWDOWN\n")
+			
+			self.clientInfo['event'].set()
+			# Create a new socket for RTP/UDP
+			self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			self.state = self.PLAYING
+			self.replyRtsp(self.OK_200, seq[1])
+			
+			# Create a new thread and start sending RTP packets
+			self.clientInfo['event'] = threading.Event()
+			self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
+			self.clientInfo['worker'].start()
 			
 			
 	def sendRtp(self):
 		"""Send RTP packets over UDP."""
 		while True:
-			self.clientInfo['event'].wait(0.05) 
+			self.clientInfo['event'].wait(self.SPEED) 
 			
 			# Stop sending if request is PAUSE or TEARDOWN
 			if self.clientInfo['event'].isSet(): 

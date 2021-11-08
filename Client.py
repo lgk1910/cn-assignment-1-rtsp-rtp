@@ -19,7 +19,9 @@ class Client:
 	PAUSE = 2
 	TEARDOWN = 3
 	STARTAGAIN = 4
-	
+	SPEEDUP = 5
+	SLOWDOWN = 6
+
 	# Initiation..
 	def __init__(self, master, serveraddr, serverport, rtpport, filename):
 		self.master = master
@@ -59,19 +61,31 @@ class Client:
 		
 		# Create Start again button			
 		self.pause = Button(self.master, width=20, padx=3, pady=3)
-		self.pause["text"] = "Play again"
+		self.pause["text"] = "Start again"
 		self.pause["command"] = self.startAgain
 		self.pause.grid(row=1, column=3, padx=2, pady=2)
+
+		# Create Speed up button			
+		self.pause = Button(self.master, width=20, padx=3, pady=3)
+		self.pause["text"] = "Speed up"
+		self.pause["command"] = self.speedUp
+		self.pause.grid(row=1, column=4, padx=2, pady=2)
+
+		# Create Slow down button			
+		self.pause = Button(self.master, width=20, padx=3, pady=3)
+		self.pause["text"] = "Slow down"
+		self.pause["command"] = self.slowDown
+		self.pause.grid(row=1, column=5, padx=2, pady=2)
 
 		# Create Teardown button
 		self.teardown = Button(self.master, width=20, padx=3, pady=3)
 		self.teardown["text"] = "Teardown"
 		self.teardown["command"] =  self.exitClient
-		self.teardown.grid(row=1, column=4, padx=2, pady=2)
+		self.teardown.grid(row=1, column=6, padx=2, pady=2)
 		
 		# Create a label to display the movie
 		self.label = Label(self.master, height=19)
-		self.label.grid(row=0, column=0, columnspan=5, sticky=W+E+N+S, padx=5, pady=5) 
+		self.label.grid(row=0, column=0, columnspan=6, sticky=W+E+N+S, padx=5, pady=5) 
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -90,6 +104,26 @@ class Client:
 		self.playEvent.clear()
 
 		self.sendRtspRequest(self.STARTAGAIN)
+
+	def speedUp(self):
+		threading.Thread(target=self.listenRtp).start()
+		self.state = self.READY
+
+		self.playEvent = threading.Event()
+
+		self.playEvent.clear()
+
+		self.sendRtspRequest(self.SPEEDUP)
+
+	def slowDown(self):
+		threading.Thread(target=self.listenRtp).start()
+		self.state = self.READY
+
+		self.playEvent = threading.Event()
+
+		self.playEvent.clear()
+
+		self.sendRtspRequest(self.SLOWDOWN)
 
 	def exitClient(self):
 		"""Teardown button handler."""
@@ -251,6 +285,26 @@ class Client:
 
 			self.requestSent = self.STARTAGAIN
 
+		# SPEEDUP request
+
+		elif requestCode == self.SPEEDUP and self.state == self.READY:
+
+			self.rtspSeq += 1
+
+			request = 'SPEEDUP ' + self.fileName + ' RTSP/1.0\nCSeq: ' + str(self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+
+			self.requestSent = self.SPEEDUP
+
+		# SLOWDOWN request
+
+		elif requestCode == self.SLOWDOWN and self.state != self.INIT:
+
+			self.rtspSeq += 1
+
+			request = 'SLOWDOWN ' + self.fileName + ' RTSP/1.0\nCSeq: ' + str(self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+
+			self.requestSent = self.SLOWDOWN
+
 		# Play request
 
 		elif requestCode == self.PLAY and self.state == self.READY:
@@ -272,7 +326,6 @@ class Client:
 			self.requestSent = self.PAUSE
 
 			
-
 		# Teardown request
 
 		elif requestCode == self.TEARDOWN and not self.state == self.INIT:
@@ -370,6 +423,16 @@ class Client:
 
 						# The play thread exits. A new thread is created on resume.
 
+						self.playEvent.set()
+
+					elif self.requestSent == self.SPEEDUP:
+
+						self.state = self.PLAYING
+						self.playEvent.set()
+
+					elif self.requestSent == self.SLOWDOWN:
+
+						self.state = self.PLAYING
 						self.playEvent.set()
 
 					elif self.requestSent == self.TEARDOWN:
