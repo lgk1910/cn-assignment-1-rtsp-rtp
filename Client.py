@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
 from RtpPacket import RtpPacket
 import time
+from tkinter.messagebox import showinfo
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -21,7 +22,8 @@ class Client:
 	STARTAGAIN = 4
 	SPEEDUP = 5
 	SLOWDOWN = 6
-
+	DESCRIBE = 7
+	
 	# Initiation..
 	def __init__(self, master, serveraddr, serverport, rtpport, filename):
 		self.master = master
@@ -69,20 +71,26 @@ class Client:
 		self.pause = Button(self.master, width=20, padx=3, pady=3)
 		self.pause["text"] = "Speed up"
 		self.pause["command"] = self.speedUp
-		self.pause.grid(row=1, column=4, padx=2, pady=2)
+		self.pause.grid(row=2, column=0, padx=2, pady=2)
 
 		# Create Slow down button			
 		self.pause = Button(self.master, width=20, padx=3, pady=3)
 		self.pause["text"] = "Slow down"
 		self.pause["command"] = self.slowDown
-		self.pause.grid(row=1, column=5, padx=2, pady=2)
+		self.pause.grid(row=2, column=1, padx=2, pady=2)
 
 		# Create Teardown button
 		self.teardown = Button(self.master, width=20, padx=3, pady=3)
 		self.teardown["text"] = "Teardown"
 		self.teardown["command"] =  self.exitClient
-		self.teardown.grid(row=1, column=6, padx=2, pady=2)
+		self.teardown.grid(row=2, column=2, padx=2, pady=2)
 		
+		# Create Describe button
+		self.setup = Button(self.master, width=20, padx=3, pady=3)
+		self.setup["text"] = "Describe"
+		self.setup["command"] = self.describe
+		self.setup.grid(row=2, column=3, padx=2, pady=2)
+
 		# Create a label to display the movie
 		self.label = Label(self.master, height=19)
 		self.label.grid(row=0, column=0, columnspan=6, sticky=W+E+N+S, padx=5, pady=5) 
@@ -159,6 +167,11 @@ class Client:
 
 			self.sendRtspRequest(self.PLAY)
 	
+	def describe(self):
+		"""Describe button handler."""
+		if self.state != self.INIT:
+			self.sendRtspRequest(self.DESCRIBE)
+
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
 		#TODO
@@ -335,12 +348,20 @@ class Client:
 			request = 'TEARDOWN ' + self.fileName + ' RTSP/1.0\nCSeq: ' + str(self.rtspSeq) + '\nSession: ' + str(self.sessionId) 
 
 			self.requestSent = self.TEARDOWN
+		
+		# Describe request
+
+		elif requestCode == self.DESCRIBE:
+
+			self.rtspSeq += 1
+
+			request = "DESCRIBE " + str(self.fileName) + " RTSP/1.0\nCSeq: " + str(self.rtspSeq) + "\nSesssion: " + str(self.sessionId)
+			
+			self.requestSent = self.DESCRIBE
 
 		else:
 
 			return
-
-		
 
 		# Send the RTSP request using rtspSocket.
 
@@ -441,6 +462,12 @@ class Client:
 
 						# Flag the teardownAcked to close the socket.
 						self.teardownAcked = 1 
+					
+					elif self.requestSent == self.DESCRIBE:
+						description = ""
+						for i in range(3, len(lines)-1):
+							description += lines[i] + "\n\n"
+						showinfo("Description", description)
 	
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
