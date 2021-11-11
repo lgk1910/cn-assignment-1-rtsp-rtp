@@ -24,10 +24,6 @@ class Client:
 	SLOWDOWN = 6
 	DESCRIBE = 7
 	
-
-
-	print("Hello")
-	print("deeee de")
 	# Initiation..
 	def __init__(self, master, serveraddr, serverport, rtpport, filename):
 		self.master = master
