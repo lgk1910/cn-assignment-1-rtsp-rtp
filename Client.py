@@ -1,10 +1,12 @@
 from tkinter import *
 from tkinter import messagebox
+from tkinter.ttk import Progressbar
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
 from RtpPacket import RtpPacket
 import time
 from tkinter.messagebox import showinfo
+import math
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -24,6 +26,10 @@ class Client:
 	SLOWDOWN = 6
 	DESCRIBE = 7
 	
+	recv_packet_count = 0
+	download_rate = 0
+	download_rate_sqr = 0
+	last_recv_time = time.time()
 	# Initiation..
 	def __init__(self, master, serveraddr, serverport, rtpport, filename):
 		self.master = master
@@ -62,22 +68,22 @@ class Client:
 		self.pause.grid(row=1, column=2, padx=2, pady=2)
 		
 		# Create Start again button			
-		self.pause = Button(self.master, width=20, padx=3, pady=3)
-		self.pause["text"] = "Start again"
-		self.pause["command"] = self.startAgain
-		self.pause.grid(row=1, column=3, padx=2, pady=2)
+		self.startagain = Button(self.master, width=20, padx=3, pady=3)
+		self.startagain["text"] = "Start again"
+		self.startagain["command"] = self.startAgain
+		self.startagain.grid(row=1, column=3, padx=2, pady=2)
 
 		# Create Speed up button			
-		self.pause = Button(self.master, width=20, padx=3, pady=3)
-		self.pause["text"] = "Speed up"
-		self.pause["command"] = self.speedUp
-		self.pause.grid(row=2, column=0, padx=2, pady=2)
+		self.speedup = Button(self.master, width=20, padx=3, pady=3)
+		self.speedup["text"] = "Speed up"
+		self.speedup["command"] = self.speedUp
+		self.speedup.grid(row=2, column=0, padx=2, pady=2)
 
 		# Create Slow down button			
-		self.pause = Button(self.master, width=20, padx=3, pady=3)
-		self.pause["text"] = "Slow down"
-		self.pause["command"] = self.slowDown
-		self.pause.grid(row=2, column=1, padx=2, pady=2)
+		self.slowdown = Button(self.master, width=20, padx=3, pady=3)
+		self.slowdown["text"] = "Slow down"
+		self.slowdown["command"] = self.slowDown
+		self.slowdown.grid(row=2, column=1, padx=2, pady=2)
 
 		# Create Teardown button
 		self.teardown = Button(self.master, width=20, padx=3, pady=3)
@@ -86,10 +92,16 @@ class Client:
 		self.teardown.grid(row=2, column=2, padx=2, pady=2)
 		
 		# Create Describe button
-		self.setup = Button(self.master, width=20, padx=3, pady=3)
-		self.setup["text"] = "Describe"
-		self.setup["command"] = self.describe
-		self.setup.grid(row=2, column=3, padx=2, pady=2)
+		self.descrb = Button(self.master, width=20, padx=3, pady=3)
+		self.descrb["text"] = "Describe"
+		self.descrb["command"] = self.describe
+		self.descrb.grid(row=2, column=3, padx=2, pady=2)
+
+		# Create progress bar
+		self.progressbar = Progressbar(self.master, orient=HORIZONTAL, length=300, mode='determinate')
+		self.progressbar.grid(row=3, column=1, padx=2, pady=2, columnspan=2)
+		self.master.update_idletasks()
+		self.progressbar['value'] = 0
 
 		# Create a label to display the movie
 		self.label = Label(self.master, height=19)
@@ -175,33 +187,43 @@ class Client:
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
 		#TODO
-		print("Listennnnnnnnnnn")
+		self.last_recv_time = time.time()
 		while True:
 
 			try:
 
 				data = self.rtpSocket.recv(20480)
-
+				
 				if data:
-
+					download_time = (time.time() - self.last_recv_time)
 					rtpPacket = RtpPacket()
 
 					rtpPacket.decode(data)
 
-					
-
 					currFrameNbr = rtpPacket.seqNum()
 
 					print ("Current Seq Num: " + str(currFrameNbr))
-
+					self.recv_packet_count += 1
 										
-
 					if currFrameNbr > self.frameNbr or self.requestSent == self.STARTAGAIN: # Discard the late packet
 
 						self.frameNbr = currFrameNbr
 
 						self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
 
+						self.master.update_idletasks()
+						self.progressbar['value'] = int(currFrameNbr/self.totalFrame*100)
+						# print(int(currFrameNbr/self.totalFrame*100))
+					
+					payload_size = os.path.getsize(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT)
+					# Calculate E(X)
+					self.download_rate = self.download_rate*(self.recv_packet_count-1) + (payload_size/download_time)
+					self.download_rate = self.download_rate/self.recv_packet_count
+
+					# Calculate E(X^2)
+					# self.download_rate_sqr = self.download_rate_sqr*(self.recv_packet_count-1) + (payload_size/download_time)**2
+					# self.download_rate_sqr = self.download_rate_sqr/self.recv_packet_count
+				self.last_recv_time = time.time()
 			except:
 
 				# Stop listening upon requesting PAUSE or TEARDOWN
@@ -217,7 +239,7 @@ class Client:
 				# close the RTP socket
 
 				if self.teardownAcked == 1:
-					
+
 					self.rtpSocket.shutdown(socket.SHUT_RDWR)
 
 					self.rtpSocket.close()
@@ -381,7 +403,7 @@ class Client:
 			
 
 			# Close the RTSP socket upon requesting Teardown
-
+			
 			if self.requestSent == self.TEARDOWN:
 				print("shutdown")
 				self.rtspSocket.shutdown(socket.SHUT_RDWR)
@@ -396,8 +418,6 @@ class Client:
 		lines = data.split('\n')
 
 		seqNum = int(lines[1].split(' ')[1])
-
-		
 
 		# Process only if the server reply's sequence number is the same as the request's
 
@@ -428,6 +448,10 @@ class Client:
 						# Open RTP port.
 
 						self.openRtpPort()
+
+						# Update total number of frames
+						self.totalFrame = int(lines[-1].split(" ")[-1])
+						# print(f"Total Frame: {self.totalFrame}")
 
 					elif self.requestSent == self.STARTAGAIN:
 						
@@ -467,6 +491,13 @@ class Client:
 						description = ""
 						for i in range(3, len(lines)-1):
 							description += lines[i] + "\n\n"
+						packet_sent = int(lines[-1].split(" ")[-1])
+						description += f"Packet loss: {(packet_sent - self.recv_packet_count)/packet_sent*100}"
+						description += f"\n\n-->Sent: {packet_sent}"
+						description += f"\n\n-->Received: {self.recv_packet_count}"
+						description += f"\n\nData rate: {self.download_rate/(1024):.0f} KB/s"
+						# description += f"\n\nStd of Data rate: {math.sqrt(self.download_rate_sqr - self.download_rate**2)/1024:.0f} KB/s"
+						# print(f"\n\n-->Sent: {packet_sent}\n-->Received: {self.recv_packet_coun}")
 						showinfo("Description", description)
 	
 	def openRtpPort(self):
