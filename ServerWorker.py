@@ -79,7 +79,6 @@ class ServerWorker:
 				
 				# Get the RTP/UDP port from the last line
 				self.clientInfo['rtpPort'] = request[2].split(' ')[3]
-		
 		# Process PLAY request 		
 		elif requestType == self.PLAY:
 			if self.state == self.READY:
@@ -122,64 +121,67 @@ class ServerWorker:
 		
 		# Process STARTAGAIN request
 		elif requestType == self.STARTAGAIN:
-			self.clientInfo['videoStream'].currentFile().close()
-			self.clientInfo['videoStream'] = VideoStream(filename)
+			if self.state != self.INIT:
+				self.clientInfo['videoStream'].currentFile().close()
+				self.clientInfo['videoStream'] = VideoStream(filename)
+				
+				print("processing STARTAGAIN\n")
+				
+				self.clientInfo['event'].set()
+				# Create a new socket for RTP/UDP
+				self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+				self.state = self.PLAYING
 			
-			print("processing STARTAGAIN\n")
-			
-			self.clientInfo['event'].set()
-			# Create a new socket for RTP/UDP
-			self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			self.state = self.PLAYING
-		
-			# Create a new thread and start sending RTP packets
-			self.clientInfo['event'] = threading.Event()
-			self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
-			self.clientInfo['worker'].start()
-			self.replyRtsp(self.OK_200, seq[1])
+				# Create a new thread and start sending RTP packets
+				self.clientInfo['event'] = threading.Event()
+				self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
+				self.clientInfo['worker'].start()
+				self.replyRtsp(self.OK_200, seq[1])
 		
 		# Process SPEEDUP request
 		elif requestType == self.SPEEDUP:
-			if self.SPEED > 0.025:
-				print(f"Speed: {self.SPEED}")
-				self.SPEED = self.SPEED*0.5
-			
-			print("processing SPEEDUP\n")
-			
-			self.clientInfo['event'].set()
-			# Create a new socket for RTP/UDP
-			self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			self.state = self.PLAYING
-			
-			# Create a new thread and start sending RTP packets
-			self.clientInfo['event'] = threading.Event()
-			self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
-			self.clientInfo['worker'].start()
-			self.replyRtsp(self.OK_200, seq[1])
+			if self.state != self.INIT:
+				if self.SPEED > 0.025:
+					print(f"Speed: {self.SPEED}")
+					self.SPEED = self.SPEED*0.5
+				
+				print("processing SPEEDUP\n")
+				
+				self.clientInfo['event'].set()
+				# Create a new socket for RTP/UDP
+				self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+				self.state = self.PLAYING
+				
+				# Create a new thread and start sending RTP packets
+				self.clientInfo['event'] = threading.Event()
+				self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
+				self.clientInfo['worker'].start()
+				self.replyRtsp(self.OK_200, seq[1])
 
 		# Process SLOWDOWN request
 		elif requestType == self.SLOWDOWN:
-			if self.SPEED < 0.1:
-				print(f"Speed: {self.SPEED}")
-				self.SPEED = self.SPEED*2
-			
-			print("processing SLOWDOWN\n")
-			
-			self.clientInfo['event'].set()
-			# Create a new socket for RTP/UDP
-			self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			self.state = self.PLAYING
-			self.replyRtsp(self.OK_200, seq[1])
-			
-			# Create a new thread and start sending RTP packets
-			self.clientInfo['event'] = threading.Event()
-			self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
-			self.clientInfo['worker'].start()
+			if self.state != self.INIT:
+				if self.SPEED < 0.1:
+					print(f"Speed: {self.SPEED}")
+					self.SPEED = self.SPEED*2
+				
+				print("processing SLOWDOWN\n")
+				
+				self.clientInfo['event'].set()
+				# Create a new socket for RTP/UDP
+				self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+				self.state = self.PLAYING
+				self.replyRtsp(self.OK_200, seq[1])
+				
+				# Create a new thread and start sending RTP packets
+				self.clientInfo['event'] = threading.Event()
+				self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
+				self.clientInfo['worker'].start()
 
 		# Process DESCRIBE request
 		elif requestType == self.DESCRIBE:
-			print("here")
-			self.replyRtsp(self.OK_200, seq[1], requestType)
+			if self.state != self.INIT:
+				self.replyRtsp(self.OK_200, seq[1], requestType)
 			
 	def sendRtp(self):
 		"""Send RTP packets over UDP."""
@@ -235,7 +237,7 @@ class ServerWorker:
 			elif requestType in [self.PLAY, self.STARTAGAIN, self.SLOWDOWN, self.STARTAGAIN]:
 				reply += f"\nSent time: {time.time()}"
 			connSocket = self.clientInfo['rtspSocket'][0]
-			# print('connSOcket', connSocket)
+			# print('connSocket', connSocket)
 			connSocket.send(reply.encode())
 		
 		# Error messages
