@@ -492,7 +492,7 @@ class Client:
 						for i in range(3, len(lines)-1):
 							description += lines[i] + "\n\n"
 						packet_sent = int(lines[-1].split(" ")[-1])
-						description += f"Packet loss: {(packet_sent - self.recv_packet_count)/packet_sent*100}"
+						description += f"Packet loss: {(packet_sent - self.recv_packet_count)/packet_sent*100:.2f}%"
 						description += f"\n\n-->Sent: {packet_sent}"
 						description += f"\n\n-->Received: {self.recv_packet_count}"
 						description += f"\n\nData rate: {self.download_rate/(1024):.0f} KB/s"
